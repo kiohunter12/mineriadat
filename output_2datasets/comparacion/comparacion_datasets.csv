@@ -1,0 +1,5 @@
+dataset,modelo,accuracy,f1,auc
+dataset_ejemplo,Arbol de Decision,0.85625,0.8564469101013659,0.8846637335009429
+dataset_ejemplo,Random Forest,0.86875,0.8688066643117862,0.9415461973601508
+dataset_ejemplo2,Arbol de Decision,0.675,0.6700161420500403,0.59717868338558
+dataset_ejemplo2,Random Forest,0.725,0.6895341382626349,0.6746778126088471

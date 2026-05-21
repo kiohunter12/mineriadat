@@ -1,0 +1,215 @@
+REPORTE DE EJECUCION - dataset_sucio_grande.csv
+Archivo: data/dataset_sucio_grande.csv
+
+======================================================================
+1.B  EDA + LIMPIEZA AUTOMÁTICA
+======================================================================
+
+Marcadores no estándar de NaN convertidos: 135
+Columnas reconvertidas a numéricas: 4  ['edad', 'ingreso_mensual', 'gasto_promedio', 'descuento_pct']
+Filas duplicadas eliminadas: 0
+
+Detalle de cambios:
+  - 'edad': 77 valores tipo 'N/A','?','-','' convertidos a NaN
+  - 'ingreso_mensual': 58 valores tipo 'N/A','?','-','' convertidos a NaN
+  - 'edad': reconvertida a numérica (éxito 100%) - antes era texto
+  - 'ingreso_mensual': reconvertida a numérica (éxito 100%) - antes era texto
+  - 'gasto_promedio': reconvertida a numérica (éxito 100%) - antes era texto
+  - 'descuento_pct': reconvertida a numérica (éxito 100%) - antes era texto
+
+Tipos de columna después de la limpieza:
+        columna    tipo  nulos  %nulos
+           edad float64     77    19.2
+ingreso_mensual float64     58    14.5
+ gasto_promedio float64      0     0.0
+  descuento_pct float64      0     0.0
+         ciudad  object      0     0.0
+      fidelidad  object      0     0.0
+         compro   int64      0     0.0
+
+======================================================================
+1. EXPLORACIÓN INICIAL DEL DATASET
+======================================================================
+Dimensiones: 400 filas x 7 columnas
+Variable objetivo: compro
+Columnas numéricas (4): ['edad', 'ingreso_mensual', 'gasto_promedio', 'descuento_pct']
+Columnas categóricas (2): ['ciudad', 'fidelidad']
+
+Valores nulos detectados:
+edad               77
+ingreso_mensual    58
+
+Distribución de la variable objetivo 'compro':
+compro
+1    251
+0    149
+
+======================================================================
+2. PARTICIÓN DE DATOS Y MODELO BASELINE
+======================================================================
+Se aplica partición ESTRATIFICADA 60/20/20:
+  - Entrenamiento: 240 registros (60%)
+  - Validación:    80 registros (20%)
+  - Prueba:        80 registros (20%)
+
+¿QUÉ ES DATA LEAKAGE?
+Es la fuga de información del conjunto de prueba hacia el modelo
+durante el entrenamiento. Provoca métricas falsamente altas que no
+se reproducen en producción.
+
+CÓMO LO EVITAMOS EN ESTE PROYECTO:
+  1) Stratify mantiene la proporción de clases sin sesgar el split.
+  2) Imputación, escalado y OneHotEncoder van DENTRO de un Pipeline
+     que se ajusta SOLO con X_train; val y test solo se transforman.
+  3) El conjunto de test no se toca hasta el final.
+
+MODELO BASELINE (DummyClassifier - clase mayoritaria):
+  Accuracy en validación: 0.6250
+  F1-score en validación: 0.4808
+Cualquier modelo entrenado debe superar estas métricas para
+considerarse útil.
+
+======================================================================
+3. SEGMENTACIÓN (CLUSTERING)
+======================================================================
+
+--- K-MEANS ---
+Algoritmo de partición que minimiza la distancia intra-cluster.
+  k=2  ->  Silhouette = 0.1517
+  k=3  ->  Silhouette = 0.1415
+  k=4  ->  Silhouette = 0.1475
+  k=5  ->  Silhouette = 0.1537
+  k=6  ->  Silhouette = 0.1506
+  >> Mejor k (K-Means según Silhouette): 5
+
+--- CLUSTERING JERÁRQUICO (aglomerativo, enlace 'ward') ---
+Construye una jerarquía fusionando los puntos más cercanos.
+  k=2  ->  Silhouette = 0.1389
+  k=3  ->  Silhouette = 0.1354
+  k=4  ->  Silhouette = 0.1335
+  k=5  ->  Silhouette = 0.1261
+  k=6  ->  Silhouette = 0.1248
+  >> Mejor k (Jerárquico según Silhouette): 2
+
+--- INTERPRETACIÓN DE LOS CLUSTERS (K-MEANS) ---
+Promedio de variables numéricas por cluster:
+          edad  ingreso_mensual  gasto_promedio  descuento_pct
+cluster                                                       
+0        31.57          2327.97           16.20           9.06
+1        54.70          2594.64           20.08          10.58
+2        36.79          2344.29           16.69          21.42
+3        37.88          3145.71           42.43          13.87
+4        42.48          5468.18           16.97          12.02
+
+PROPUESTA DE PERFILES DE CLIENTES:
+  Cluster 0: 72 clientes (30.0%) - revisar tabla de medias
+    Identificar la(s) variable(s) con valor más alto/bajo
+    para nombrarlo (ej: 'Premium', 'Ocasional', 'Inactivo').
+  Cluster 1: 40 clientes (16.7%) - revisar tabla de medias
+    Identificar la(s) variable(s) con valor más alto/bajo
+    para nombrarlo (ej: 'Premium', 'Ocasional', 'Inactivo').
+  Cluster 2: 45 clientes (18.8%) - revisar tabla de medias
+    Identificar la(s) variable(s) con valor más alto/bajo
+    para nombrarlo (ej: 'Premium', 'Ocasional', 'Inactivo').
+  Cluster 3: 39 clientes (16.2%) - revisar tabla de medias
+    Identificar la(s) variable(s) con valor más alto/bajo
+    para nombrarlo (ej: 'Premium', 'Ocasional', 'Inactivo').
+  Cluster 4: 44 clientes (18.3%) - revisar tabla de medias
+    Identificar la(s) variable(s) con valor más alto/bajo
+    para nombrarlo (ej: 'Premium', 'Ocasional', 'Inactivo').
+
+======================================================================
+4. CLASIFICACIÓN
+======================================================================
+
+--- ÁRBOL DE DECISIÓN ---
+Modelo interpretable que divide el espacio con reglas if-else.
+  Validación  -> Accuracy: 0.6000  F1: 0.5840  AUC: 0.6303
+
+--- RANDOM FOREST ---
+Ensamble de árboles que reduce varianza y suele dar mejor desempeño.
+  Validación  -> Accuracy: 0.6000  F1: 0.5637  AUC: 0.5360
+
+--- EVALUACIÓN EN CONJUNTO DE PRUEBA (test) ---
+  Arbol de Decision         -> Acc: 0.5625  F1: 0.5479  AUC: 0.4687
+  Random Forest             -> Acc: 0.6375  F1: 0.5824  AUC: 0.5850
+
+======================================================================
+5. EVALUACIÓN COMPARATIVA
+======================================================================
+
+--- CURVAS ROC ---
+La curva ROC muestra el equilibrio entre verdaderos positivos y
+falsos positivos. Mientras más cercana a la esquina superior izquierda,
+mejor el modelo. El AUC resume la curva en un solo número (0.5 = azar).
+  Arbol de Decision: AUC = 0.4687
+  Random Forest: AUC = 0.5850
+
+--- TABLA COMPARATIVA DE MODELOS ---
+           modelo   conjunto  accuracy       f1      auc
+ Baseline (Dummy) Validación    0.6250 0.480769      NaN
+Árbol de Decisión Validación    0.6000 0.584046 0.630333
+    Random Forest Validación    0.6000 0.563692 0.536000
+Arbol de Decision       Test    0.5625 0.547919 0.468667
+    Random Forest       Test    0.6375 0.582445 0.585000
+
+======================================================================
+6. MATRIZ DE CONFUSIÓN E INTERPRETACIÓN
+======================================================================
+Mejor modelo: Random Forest
+
+Matriz (filas=real, columnas=predicho):
+        Pred 0  Pred 1
+Real 0       6      24
+Real 1       5      45
+
+Reporte de clasificación detallado:
+              precision    recall  f1-score   support
+
+           0       0.55      0.20      0.29        30
+           1       0.65      0.90      0.76        50
+
+    accuracy                           0.64        80
+   macro avg       0.60      0.55      0.52        80
+weighted avg       0.61      0.64      0.58        80
+
+INTERPRETACIÓN:
+  - Verdaderos Positivos (TP): 45  -> clientes que respondieron y los acertamos
+  - Verdaderos Negativos (TN): 6  -> clientes que NO respondieron y los acertamos
+  - Falsos Positivos (FP):     24  -> les enviamos campaña y NO respondieron (costo de marketing)
+  - Falsos Negativos (FN):     5  -> clientes que sí habrían respondido y dejamos de contactar (oportunidad perdida)
+
+  - Precision (clase positiva): TP/(TP+FP) = 0.652
+    (de los que marcamos como positivos, qué % lo son realmente)
+  - Recall (clase positiva):    TP/(TP+FN) = 0.900
+    (de los positivos reales, qué % capturamos)
+  - Accuracy global:            (TP+TN)/Total = 0.637
+
+======================================================================
+7. COMUNICACIÓN A EQUIPO GERENCIAL NO TÉCNICO
+======================================================================
+
+RESUMEN PARA GERENCIA:
+
+Construimos varios modelos para apoyar la decisión de a qué clientes contactar.
+El modelo que ofrece el mejor balance entre aciertos y errores es
+'Random Forest', con los siguientes resultados sobre datos que nunca vio:
+
+  - De cada 100 decisiones, acierta aproximadamente 64.
+  - Tiene un puntaje balanceado (F1) de 58% que combina
+    no equivocarse al señalar clientes y no perder oportunidades.
+  - La capacidad de distinguir entre clientes que responden y los que no
+    (AUC) es 0.58 (0.5 sería decidir al azar; 1.0 sería perfecto).
+
+QUÉ SIGNIFICA EN LA PRÁCTICA:
+  - Podemos enfocar la campaña en clientes con mayor probabilidad de
+    responder, reduciendo el costo de contactos infructuosos.
+  - Quedan errores: algunos clientes serán contactados sin responder
+    (gasto extra) y otros no serán contactados aunque hubieran respondido
+    (oportunidad perdida). La matriz de confusión cuantifica ambos.
+
+RIESGOS Y RECOMENDACIONES:
+  - Validar el modelo con datos más recientes antes de pasarlo a producción.
+  - Establecer monitoreo: si la tasa de aciertos cae, reentrenar.
+  - Acompañar la decisión técnica con criterio de negocio (clientes VIP,
+    políticas de contacto, presupuesto).

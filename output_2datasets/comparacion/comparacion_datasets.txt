@@ -1,0 +1,37 @@
+======================================================================
+COMPARACIÓN ENTRE DATASETS
+======================================================================
+Dataset A: dataset_ejemplo  (800 filas x 8 cols, target='respuesta_campania')
+Dataset B: dataset_ejemplo2  (600 filas x 7 cols, target='abandono')
+
+----------------------------------------------------------------------
+1) SEGMENTACIÓN (CLUSTERING)
+----------------------------------------------------------------------
+              Métrica  dataset_ejemplo  dataset_ejemplo2
+    Mejor k (K-Means)           2.0000            4.0000
+   Silhouette K-Means           0.4428            0.1436
+ Mejor k (Jerárquico)           2.0000            4.0000
+Silhouette Jerárquico           0.4428            0.1079
+
+----------------------------------------------------------------------
+2) CLASIFICACIÓN - MÉTRICAS EN TEST
+----------------------------------------------------------------------
+         dataset            modelo  accuracy       f1      auc
+ dataset_ejemplo Arbol de Decision   0.85625 0.856447 0.884664
+ dataset_ejemplo     Random Forest   0.86875 0.868807 0.941546
+dataset_ejemplo2 Arbol de Decision   0.67500 0.670016 0.597179
+dataset_ejemplo2     Random Forest   0.72500 0.689534 0.674678
+
+----------------------------------------------------------------------
+3) INTERPRETACIÓN
+----------------------------------------------------------------------
+- En clasificación, los modelos rinden mejor en 'dataset_ejemplo' que en
+  'dataset_ejemplo2' (diferencia promedio de F1 = 0.1829).
+- En clustering, 'dataset_ejemplo' presenta clusters mejor
+  separados (Silhouette = 0.443 vs 0.144).
+
+POSIBLES EXPLICACIONES DE LAS DIFERENCIAS:
+  - Distinta calidad de los datos (nulos, ruido, balance de clases).
+  - Distinto poder predictivo de las variables disponibles.
+  - Distinto tamaño muestral (más datos suelen ayudar al modelo).
+  - Distinta dificultad intrínseca del problema en cada dataset.

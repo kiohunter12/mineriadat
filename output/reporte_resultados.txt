@@ -1,0 +1,256 @@
+REPORTE DE EJECUCION - student-mat.csv
+Archivo: D:\c8\mineriad\student-mat.csv
+
+======================================================================
+1.B  EDA + LIMPIEZA AUTOMÁTICA
+======================================================================
+
+Marcadores no estándar de NaN convertidos: 0
+Columnas reconvertidas a numéricas: 0  
+Filas duplicadas eliminadas: 0
+
+Detalle de cambios:
+  No fueron necesarios ajustes (los datos ya estaban limpios).
+
+Tipos de columna después de la limpieza:
+   columna   tipo  nulos  %nulos
+    school object      0     0.0
+       sex object      0     0.0
+       age  int64      0     0.0
+   address object      0     0.0
+   famsize object      0     0.0
+   Pstatus object      0     0.0
+      Medu  int64      0     0.0
+      Fedu  int64      0     0.0
+      Mjob object      0     0.0
+      Fjob object      0     0.0
+    reason object      0     0.0
+  guardian object      0     0.0
+traveltime  int64      0     0.0
+ studytime  int64      0     0.0
+  failures  int64      0     0.0
+ schoolsup object      0     0.0
+    famsup object      0     0.0
+      paid object      0     0.0
+activities object      0     0.0
+   nursery object      0     0.0
+    higher object      0     0.0
+  internet object      0     0.0
+  romantic object      0     0.0
+    famrel  int64      0     0.0
+  freetime  int64      0     0.0
+     goout  int64      0     0.0
+      Dalc  int64      0     0.0
+      Walc  int64      0     0.0
+    health  int64      0     0.0
+  absences  int64      0     0.0
+        G1  int64      0     0.0
+        G2  int64      0     0.0
+        G3  int64      0     0.0
+
+======================================================================
+1.C  DISCRETIZACIÓN DEL TARGET (si aplica)
+======================================================================
+Variable objetivo: 'G3'
+Tipo detectado: int64
+Valores únicos: 18
+Conclusión: target CONTINUO detectado.
+Se aplica discretización para poder usar matriz de confusión
+y métricas de clasificación (Accuracy, F1, AUC).
+
+Método: CUANTILES en 3 grupos.
+Bordes calculados: [np.float64(0.0), np.float64(10.0), np.float64(12.0), np.float64(20.0)]
+Etiquetas: ['Bajo', 'Medio', 'Alto']
+
+Distribución de la nueva variable objetivo:
+G3_cat
+Bajo     186
+Medio     78
+Alto     131
+
+======================================================================
+1. EXPLORACIÓN INICIAL DEL DATASET
+======================================================================
+Dimensiones: 395 filas x 33 columnas
+Variable objetivo: G3_cat
+Columnas numéricas (15): ['age', 'Medu', 'Fedu', 'traveltime', 'studytime', 'failures', 'famrel', 'freetime', 'goout', 'Dalc', 'Walc', 'health', 'absences', 'G1', 'G2']
+Columnas categóricas (17): ['school', 'sex', 'address', 'famsize', 'Pstatus', 'Mjob', 'Fjob', 'reason', 'guardian', 'schoolsup', 'famsup', 'paid', 'activities', 'nursery', 'higher', 'internet', 'romantic']
+
+No hay valores nulos en el dataset.
+
+Distribución de la variable objetivo 'G3_cat':
+G3_cat
+Bajo     186
+Alto     131
+Medio     78
+
+======================================================================
+2. PARTICIÓN DE DATOS Y MODELO BASELINE
+======================================================================
+Se aplica partición ESTRATIFICADA 60/20/20:
+  - Entrenamiento: 237 registros (60%)
+  - Validación:    79 registros (20%)
+  - Prueba:        79 registros (20%)
+
+¿QUÉ ES DATA LEAKAGE?
+Es la fuga de información del conjunto de prueba hacia el modelo
+durante el entrenamiento. Provoca métricas falsamente altas que no
+se reproducen en producción.
+
+CÓMO LO EVITAMOS EN ESTE PROYECTO:
+  1) Stratify mantiene la proporción de clases sin sesgar el split.
+  2) Imputación, escalado y OneHotEncoder van DENTRO de un Pipeline
+     que se ajusta SOLO con X_train; val y test solo se transforman.
+  3) El conjunto de test no se toca hasta el final.
+
+MODELO BASELINE (DummyClassifier - clase mayoritaria):
+  Accuracy en validación: 0.4684
+  F1-score en validación: 0.2988
+Cualquier modelo entrenado debe superar estas métricas para
+considerarse útil.
+
+======================================================================
+3. SEGMENTACIÓN (CLUSTERING)
+======================================================================
+
+--- K-MEANS ---
+Algoritmo de partición que minimiza la distancia intra-cluster.
+  k=2  ->  Silhouette = 0.0816
+  k=3  ->  Silhouette = 0.0694
+  k=4  ->  Silhouette = 0.0565
+  k=5  ->  Silhouette = 0.0521
+  k=6  ->  Silhouette = 0.0577
+  >> Mejor k (K-Means según Silhouette): 2
+
+--- CLUSTERING JERÁRQUICO (aglomerativo, enlace 'ward') ---
+Construye una jerarquía fusionando los puntos más cercanos.
+  k=2  ->  Silhouette = 0.0609
+  k=3  ->  Silhouette = 0.0614
+  k=4  ->  Silhouette = 0.0492
+  k=5  ->  Silhouette = 0.0297
+  k=6  ->  Silhouette = 0.0347
+  >> Mejor k (Jerárquico según Silhouette): 3
+
+--- INTERPRETACIÓN DE LOS CLUSTERS (K-MEANS) ---
+Promedio de variables numéricas por cluster:
+           age  Medu  Fedu  traveltime  studytime  failures  famrel  freetime  goout  Dalc  Walc  health  absences     G1     G2
+cluster                                                                                                                         
+0        16.97  2.20  1.98        1.63       1.89      0.64    3.98      3.33   3.16  1.60  2.37    3.67      6.31   8.92   8.36
+1        16.32  3.43  3.23        1.27       2.24      0.03    3.96      3.22   3.18  1.34  2.08    3.61      4.39  13.02  13.05
+
+PROPUESTA DE PERFILES DE CLIENTES:
+  Cluster 0: 118 clientes (49.8%) - revisar tabla de medias
+    Identificar la(s) variable(s) con valor más alto/bajo
+    para nombrarlo (ej: 'Premium', 'Ocasional', 'Inactivo').
+  Cluster 1: 119 clientes (50.2%) - revisar tabla de medias
+    Identificar la(s) variable(s) con valor más alto/bajo
+    para nombrarlo (ej: 'Premium', 'Ocasional', 'Inactivo').
+
+======================================================================
+4. CLASIFICACIÓN
+======================================================================
+
+--- ÁRBOL DE DECISIÓN ---
+Modelo interpretable que divide el espacio con reglas if-else.
+  Validación  -> Accuracy: 0.8734  F1: 0.8680  AUC: 0.9014
+
+--- RANDOM FOREST ---
+Ensamble de árboles que reduce varianza y suele dar mejor desempeño.
+  Validación  -> Accuracy: 0.8354  F1: 0.8077  AUC: 0.9638
+
+--- EVALUACIÓN EN CONJUNTO DE PRUEBA (test) ---
+  Arbol de Decision         -> Acc: 0.8101  F1: 0.8116  AUC: 0.8636
+  Random Forest             -> Acc: 0.8354  F1: 0.7975  AUC: 0.9712
+
+(Curva ROC se omite: problema multiclase. Se reporta AUC weighted.)
+
+--- TABLA COMPARATIVA DE MODELOS ---
+           modelo   conjunto  accuracy       f1      auc
+ Baseline (Dummy) Validacion  0.468354 0.298778      NaN
+Árbol de Decisión Validacion  0.873418 0.868009 0.901367
+    Random Forest Validacion  0.835443 0.807694 0.963758
+Arbol de Decision       Test  0.810127 0.811623 0.863620
+    Random Forest       Test  0.835443 0.797526 0.971165
+
+======================================================================
+6. MATRIZ DE CONFUSION E INTERPRETACION
+======================================================================
+Mejor modelo: Arbol de Decision
+
+Matriz de CONTEOS (filas=real, columnas=predicho):
+            Pred Alto  Pred Bajo  Pred Medio
+Real Alto          21          0           5
+Real Bajo           0         34           3
+Real Medio          2          5           9
+
+Matriz NORMALIZADA por fila (% de cada clase real):
+            Pred Alto  Pred Bajo  Pred Medio
+Real Alto       0.808      0.000       0.192
+Real Bajo       0.000      0.919       0.081
+Real Medio      0.125      0.312       0.562
+
+--- METRICAS GLOBALES ---
+  Accuracy          = 0.810
+  Balanced Accuracy = 0.763  (accuracy ajustado por desbalance)
+  Cohen's Kappa     = 0.698  (acuerdo vs. azar; 1.0 perfecto, 0 = nivel azar)
+  MCC               = 0.700  (correlacion -1 a 1; robusto a desbalance)
+
+--- REPORTE DETALLADO POR CLASE (sklearn) ---
+              precision    recall  f1-score   support
+
+        Alto       0.91      0.81      0.86        26
+        Bajo       0.87      0.92      0.89        37
+       Medio       0.53      0.56      0.55        16
+
+    accuracy                           0.81        79
+   macro avg       0.77      0.76      0.77        79
+weighted avg       0.82      0.81      0.81        79
+
+--- INTERPRETACION DETALLADA (multiclase) ---
+
+Desempeño por clase:
+Clase            Precision     Recall         F1    Casos
+Alto                 0.913      0.808      0.857       26
+Bajo                 0.872      0.919      0.895       37
+Medio                0.529      0.562      0.545       16
+
+Clase mejor identificada: 'Bajo' (recall = 0.919)
+Clase peor identificada:  'Medio' (recall = 0.562)
+
+--- PRINCIPALES CONFUSIONES (errores entre clases) ---
+  Real 'Medio' -> Predicho 'Bajo': 5 casos (31.2% de los 'Medio' reales)
+  Real 'Alto' -> Predicho 'Medio': 5 casos (19.2% de los 'Alto' reales)
+  Real 'Bajo' -> Predicho 'Medio': 3 casos (8.1% de los 'Bajo' reales)
+  Real 'Medio' -> Predicho 'Alto': 2 casos (12.5% de los 'Medio' reales)
+
+--- RECOMENDACIONES ---
+  - El modelo distingue razonablemente todas las clases.
+
+======================================================================
+7. COMUNICACION A EQUIPO GERENCIAL NO TECNICO
+======================================================================
+
+RESUMEN PARA GERENCIA:
+
+Construimos varios modelos para apoyar la decision de a que clientes contactar.
+El modelo que ofrece el mejor balance entre aciertos y errores es
+'Arbol de Decision', con los siguientes resultados sobre datos que nunca vio:
+
+  - De cada 100 decisiones, acierta aproximadamente 81.
+  - Tiene un puntaje balanceado (F1) de 81% que combina
+    no equivocarse al senalar clientes y no perder oportunidades.
+  - La capacidad de distinguir entre clientes que responden y los que no
+    (AUC) es 0.86 (0.5 seria decidir al azar; 1.0 seria perfecto).
+
+QUE SIGNIFICA EN LA PRACTICA:
+  - Podemos enfocar la campana en clientes con mayor probabilidad de
+    responder, reduciendo el costo de contactos infructuosos.
+  - Quedan errores: algunos clientes seran contactados sin responder
+    (gasto extra) y otros no seran contactados aunque hubieran respondido
+    (oportunidad perdida). La matriz de confusion cuantifica ambos.
+
+RIESGOS Y RECOMENDACIONES:
+  - Validar el modelo con datos mas recientes antes de pasarlo a produccion.
+  - Establecer monitoreo: si la tasa de aciertos cae, reentrenar.
+  - Acompanar la decision tecnica con criterio de negocio (clientes VIP,
+    politicas de contacto, presupuesto).

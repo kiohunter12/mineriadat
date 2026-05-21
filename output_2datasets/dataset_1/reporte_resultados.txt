@@ -1,0 +1,182 @@
+REPORTE DE EJECUCION - dataset_ejemplo
+Archivo: data/dataset_ejemplo.csv
+
+======================================================================
+1. EXPLORACIÓN INICIAL DEL DATASET
+======================================================================
+Dimensiones: 800 filas x 8 columnas
+Variable objetivo: respuesta_campania
+Columnas numéricas (5): ['edad', 'ingreso_mensual', 'antiguedad_meses', 'compras_ultimo_anio', 'monto_promedio']
+Columnas categóricas (2): ['usa_app', 'ciudad']
+
+Valores nulos detectados:
+edad                   13
+ingreso_mensual        14
+antiguedad_meses       19
+compras_ultimo_anio    20
+monto_promedio         11
+usa_app                15
+ciudad                 21
+
+Distribución de la variable objetivo 'respuesta_campania':
+respuesta_campania
+1    430
+0    370
+
+======================================================================
+2. PARTICIÓN DE DATOS Y MODELO BASELINE
+======================================================================
+Se aplica partición ESTRATIFICADA 60/20/20:
+  - Entrenamiento: 480 registros (60%)
+  - Validación:    160 registros (20%)
+  - Prueba:        160 registros (20%)
+
+¿QUÉ ES DATA LEAKAGE?
+Es la fuga de información del conjunto de prueba hacia el modelo
+durante el entrenamiento. Provoca métricas falsamente altas que no
+se reproducen en producción.
+
+CÓMO LO EVITAMOS EN ESTE PROYECTO:
+  1) Stratify mantiene la proporción de clases sin sesgar el split.
+  2) Imputación, escalado y OneHotEncoder van DENTRO de un Pipeline
+     que se ajusta SOLO con X_train; val y test solo se transforman.
+  3) El conjunto de test no se toca hasta el final.
+
+MODELO BASELINE (DummyClassifier - clase mayoritaria):
+  Accuracy en validación: 0.5375
+  F1-score en validación: 0.3758
+Cualquier modelo entrenado debe superar estas métricas para
+considerarse útil.
+
+======================================================================
+3. SEGMENTACIÓN (CLUSTERING)
+======================================================================
+
+--- K-MEANS ---
+Algoritmo de partición que minimiza la distancia intra-cluster.
+  k=2  ->  Silhouette = 0.4428
+  k=3  ->  Silhouette = 0.4228
+  k=4  ->  Silhouette = 0.3589
+  k=5  ->  Silhouette = 0.2586
+  k=6  ->  Silhouette = 0.2047
+  >> Mejor k (K-Means según Silhouette): 2
+
+--- CLUSTERING JERÁRQUICO (aglomerativo, enlace 'ward') ---
+Construye una jerarquía fusionando los puntos más cercanos.
+  k=2  ->  Silhouette = 0.4428
+  k=3  ->  Silhouette = 0.4204
+  k=4  ->  Silhouette = 0.3515
+  k=5  ->  Silhouette = 0.2924
+  k=6  ->  Silhouette = 0.1737
+  >> Mejor k (Jerárquico según Silhouette): 2
+
+--- INTERPRETACIÓN DE LOS CLUSTERS (K-MEANS) ---
+Promedio de variables numéricas por cluster:
+          edad  ingreso_mensual  antiguedad_meses  compras_ultimo_anio  monto_promedio
+cluster                                                                               
+0        50.75          4511.63             89.08                 5.88          187.06
+1        27.44          2478.83             11.75                14.91           79.67
+
+PROPUESTA DE PERFILES DE CLIENTES:
+  Cluster 0: 326 clientes (67.9%) - revisar tabla de medias
+    Identificar la(s) variable(s) con valor más alto/bajo
+    para nombrarlo (ej: 'Premium', 'Ocasional', 'Inactivo').
+  Cluster 1: 154 clientes (32.1%) - revisar tabla de medias
+    Identificar la(s) variable(s) con valor más alto/bajo
+    para nombrarlo (ej: 'Premium', 'Ocasional', 'Inactivo').
+
+======================================================================
+4. CLASIFICACIÓN
+======================================================================
+
+--- ÁRBOL DE DECISIÓN ---
+Modelo interpretable que divide el espacio con reglas if-else.
+  Validación  -> Accuracy: 0.7812  F1: 0.7815  AUC: 0.7986
+
+--- RANDOM FOREST ---
+Ensamble de árboles que reduce varianza y suele dar mejor desempeño.
+  Validación  -> Accuracy: 0.8000  F1: 0.8003  AUC: 0.8799
+
+--- EVALUACIÓN EN CONJUNTO DE PRUEBA (test) ---
+  Arbol de Decision         -> Acc: 0.8562  F1: 0.8564  AUC: 0.8847
+  Random Forest             -> Acc: 0.8688  F1: 0.8688  AUC: 0.9415
+
+======================================================================
+5. EVALUACIÓN COMPARATIVA
+======================================================================
+
+--- CURVAS ROC ---
+La curva ROC muestra el equilibrio entre verdaderos positivos y
+falsos positivos. Mientras más cercana a la esquina superior izquierda,
+mejor el modelo. El AUC resume la curva en un solo número (0.5 = azar).
+  Arbol de Decision: AUC = 0.8847
+  Random Forest: AUC = 0.9415
+
+--- TABLA COMPARATIVA DE MODELOS ---
+           modelo   conjunto  accuracy       f1      auc
+ Baseline (Dummy) Validación   0.53750 0.375813      NaN
+Árbol de Decisión Validación   0.78125 0.781481 0.798554
+    Random Forest Validación   0.80000 0.800251 0.879950
+Arbol de Decision       Test   0.85625 0.856447 0.884664
+    Random Forest       Test   0.86875 0.868807 0.941546
+
+======================================================================
+6. MATRIZ DE CONFUSIÓN E INTERPRETACIÓN
+======================================================================
+Mejor modelo: Random Forest
+
+Matriz (filas=real, columnas=predicho):
+        Pred 0  Pred 1
+Real 0      64      10
+Real 1      11      75
+
+Reporte de clasificación detallado:
+              precision    recall  f1-score   support
+
+           0       0.85      0.86      0.86        74
+           1       0.88      0.87      0.88        86
+
+    accuracy                           0.87       160
+   macro avg       0.87      0.87      0.87       160
+weighted avg       0.87      0.87      0.87       160
+
+INTERPRETACIÓN:
+  - Verdaderos Positivos (TP): 75  -> clientes que respondieron y los acertamos
+  - Verdaderos Negativos (TN): 64  -> clientes que NO respondieron y los acertamos
+  - Falsos Positivos (FP):     10  -> les enviamos campaña y NO respondieron (costo de marketing)
+  - Falsos Negativos (FN):     11  -> clientes que sí habrían respondido y dejamos de contactar (oportunidad perdida)
+
+  - Precision (clase positiva): TP/(TP+FP) = 0.882
+    (de los que marcamos como positivos, qué % lo son realmente)
+  - Recall (clase positiva):    TP/(TP+FN) = 0.872
+    (de los positivos reales, qué % capturamos)
+  - Accuracy global:            (TP+TN)/Total = 0.869
+
+======================================================================
+7. COMUNICACIÓN A EQUIPO GERENCIAL NO TÉCNICO
+======================================================================
+
+RESUMEN PARA GERENCIA:
+
+Construimos varios modelos para apoyar la decisión de a qué clientes contactar.
+El modelo que ofrece el mejor balance entre aciertos y errores es
+'Random Forest', con los siguientes resultados sobre datos que nunca vio:
+
+  - De cada 100 decisiones, acierta aproximadamente 87.
+  - Tiene un puntaje balanceado (F1) de 87% que combina
+    no equivocarse al señalar clientes y no perder oportunidades.
+  - La capacidad de distinguir entre clientes que responden y los que no
+    (AUC) es 0.94 (0.5 sería decidir al azar; 1.0 sería perfecto).
+
+QUÉ SIGNIFICA EN LA PRÁCTICA:
+  - Podemos enfocar la campaña en clientes con mayor probabilidad de
+    responder, reduciendo el costo de contactos infructuosos.
+  - Quedan errores: algunos clientes serán contactados sin responder
+    (gasto extra) y otros no serán contactados aunque hubieran respondido
+    (oportunidad perdida). La matriz de confusión cuantifica ambos.
+
+RIESGOS Y RECOMENDACIONES:
+  - Validar el modelo con datos más recientes antes de pasarlo a producción.
+  - Establecer monitoreo: si la tasa de aciertos cae, reentrenar.
+  - Acompañar la decisión técnica con criterio de negocio (clientes VIP,
+    políticas de contacto, presupuesto).

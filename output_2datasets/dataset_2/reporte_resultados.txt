@@ -1,0 +1,189 @@
+REPORTE DE EJECUCION - dataset_ejemplo2
+Archivo: data/dataset_ejemplo2.csv
+
+======================================================================
+1. EXPLORACIÓN INICIAL DEL DATASET
+======================================================================
+Dimensiones: 600 filas x 7 columnas
+Variable objetivo: abandono
+Columnas numéricas (4): ['edad', 'visitas_mes', 'gasto_promedio', 'descuentos_usados']
+Columnas categóricas (2): ['tiene_tarjeta_fidelidad', 'canal_preferido']
+
+Valores nulos detectados:
+edad                        5
+visitas_mes                10
+gasto_promedio             13
+descuentos_usados          10
+tiene_tarjeta_fidelidad     5
+canal_preferido            11
+
+Distribución de la variable objetivo 'abandono':
+abandono
+0    435
+1    165
+
+======================================================================
+2. PARTICIÓN DE DATOS Y MODELO BASELINE
+======================================================================
+Se aplica partición ESTRATIFICADA 60/20/20:
+  - Entrenamiento: 360 registros (60%)
+  - Validación:    120 registros (20%)
+  - Prueba:        120 registros (20%)
+
+¿QUÉ ES DATA LEAKAGE?
+Es la fuga de información del conjunto de prueba hacia el modelo
+durante el entrenamiento. Provoca métricas falsamente altas que no
+se reproducen en producción.
+
+CÓMO LO EVITAMOS EN ESTE PROYECTO:
+  1) Stratify mantiene la proporción de clases sin sesgar el split.
+  2) Imputación, escalado y OneHotEncoder van DENTRO de un Pipeline
+     que se ajusta SOLO con X_train; val y test solo se transforman.
+  3) El conjunto de test no se toca hasta el final.
+
+MODELO BASELINE (DummyClassifier - clase mayoritaria):
+  Accuracy en validación: 0.7250
+  F1-score en validación: 0.6094
+Cualquier modelo entrenado debe superar estas métricas para
+considerarse útil.
+
+======================================================================
+3. SEGMENTACIÓN (CLUSTERING)
+======================================================================
+
+--- K-MEANS ---
+Algoritmo de partición que minimiza la distancia intra-cluster.
+  k=2  ->  Silhouette = 0.1391
+  k=3  ->  Silhouette = 0.1301
+  k=4  ->  Silhouette = 0.1436
+  k=5  ->  Silhouette = 0.1353
+  k=6  ->  Silhouette = 0.1287
+  >> Mejor k (K-Means según Silhouette): 4
+
+--- CLUSTERING JERÁRQUICO (aglomerativo, enlace 'ward') ---
+Construye una jerarquía fusionando los puntos más cercanos.
+  k=2  ->  Silhouette = 0.1078
+  k=3  ->  Silhouette = 0.1066
+  k=4  ->  Silhouette = 0.1079
+  k=5  ->  Silhouette = 0.0814
+  k=6  ->  Silhouette = 0.0873
+  >> Mejor k (Jerárquico según Silhouette): 4
+
+--- INTERPRETACIÓN DE LOS CLUSTERS (K-MEANS) ---
+Promedio de variables numéricas por cluster:
+          edad  visitas_mes  gasto_promedio  descuentos_usados
+cluster                                                       
+0        38.83         6.40           83.38               1.49
+1        39.85         3.99          219.57               1.75
+2        36.77         3.66           78.62               3.77
+3        37.67         2.71           75.24               1.14
+
+PROPUESTA DE PERFILES DE CLIENTES:
+  Cluster 0: 91 clientes (25.3%) - revisar tabla de medias
+    Identificar la(s) variable(s) con valor más alto/bajo
+    para nombrarlo (ej: 'Premium', 'Ocasional', 'Inactivo').
+  Cluster 1: 73 clientes (20.3%) - revisar tabla de medias
+    Identificar la(s) variable(s) con valor más alto/bajo
+    para nombrarlo (ej: 'Premium', 'Ocasional', 'Inactivo').
+  Cluster 2: 79 clientes (21.9%) - revisar tabla de medias
+    Identificar la(s) variable(s) con valor más alto/bajo
+    para nombrarlo (ej: 'Premium', 'Ocasional', 'Inactivo').
+  Cluster 3: 117 clientes (32.5%) - revisar tabla de medias
+    Identificar la(s) variable(s) con valor más alto/bajo
+    para nombrarlo (ej: 'Premium', 'Ocasional', 'Inactivo').
+
+======================================================================
+4. CLASIFICACIÓN
+======================================================================
+
+--- ÁRBOL DE DECISIÓN ---
+Modelo interpretable que divide el espacio con reglas if-else.
+  Validación  -> Accuracy: 0.7417  F1: 0.7276  AUC: 0.5864
+
+--- RANDOM FOREST ---
+Ensamble de árboles que reduce varianza y suele dar mejor desempeño.
+  Validación  -> Accuracy: 0.7667  F1: 0.7483  AUC: 0.7090
+
+--- EVALUACIÓN EN CONJUNTO DE PRUEBA (test) ---
+  Arbol de Decision         -> Acc: 0.6750  F1: 0.6700  AUC: 0.5972
+  Random Forest             -> Acc: 0.7250  F1: 0.6895  AUC: 0.6747
+
+======================================================================
+5. EVALUACIÓN COMPARATIVA
+======================================================================
+
+--- CURVAS ROC ---
+La curva ROC muestra el equilibrio entre verdaderos positivos y
+falsos positivos. Mientras más cercana a la esquina superior izquierda,
+mejor el modelo. El AUC resume la curva en un solo número (0.5 = azar).
+  Arbol de Decision: AUC = 0.5972
+  Random Forest: AUC = 0.6747
+
+--- TABLA COMPARATIVA DE MODELOS ---
+           modelo   conjunto  accuracy       f1      auc
+ Baseline (Dummy) Validación  0.725000 0.609420      NaN
+Árbol de Decisión Validación  0.741667 0.727624 0.586381
+    Random Forest Validación  0.766667 0.748268 0.708986
+Arbol de Decision       Test  0.675000 0.670016 0.597179
+    Random Forest       Test  0.725000 0.689534 0.674678
+
+======================================================================
+6. MATRIZ DE CONFUSIÓN E INTERPRETACIÓN
+======================================================================
+Mejor modelo: Random Forest
+
+Matriz (filas=real, columnas=predicho):
+        Pred 0  Pred 1
+Real 0      79       8
+Real 1      25       8
+
+Reporte de clasificación detallado:
+              precision    recall  f1-score   support
+
+           0       0.76      0.91      0.83        87
+           1       0.50      0.24      0.33        33
+
+    accuracy                           0.72       120
+   macro avg       0.63      0.58      0.58       120
+weighted avg       0.69      0.72      0.69       120
+
+INTERPRETACIÓN:
+  - Verdaderos Positivos (TP): 8  -> clientes que respondieron y los acertamos
+  - Verdaderos Negativos (TN): 79  -> clientes que NO respondieron y los acertamos
+  - Falsos Positivos (FP):     8  -> les enviamos campaña y NO respondieron (costo de marketing)
+  - Falsos Negativos (FN):     25  -> clientes que sí habrían respondido y dejamos de contactar (oportunidad perdida)
+
+  - Precision (clase positiva): TP/(TP+FP) = 0.500
+    (de los que marcamos como positivos, qué % lo son realmente)
+  - Recall (clase positiva):    TP/(TP+FN) = 0.242
+    (de los positivos reales, qué % capturamos)
+  - Accuracy global:            (TP+TN)/Total = 0.725
+
+======================================================================
+7. COMUNICACIÓN A EQUIPO GERENCIAL NO TÉCNICO
+======================================================================
+
+RESUMEN PARA GERENCIA:
+
+Construimos varios modelos para apoyar la decisión de a qué clientes contactar.
+El modelo que ofrece el mejor balance entre aciertos y errores es
+'Random Forest', con los siguientes resultados sobre datos que nunca vio:
+
+  - De cada 100 decisiones, acierta aproximadamente 72.
+  - Tiene un puntaje balanceado (F1) de 69% que combina
+    no equivocarse al señalar clientes y no perder oportunidades.
+  - La capacidad de distinguir entre clientes que responden y los que no
+    (AUC) es 0.67 (0.5 sería decidir al azar; 1.0 sería perfecto).
+
+QUÉ SIGNIFICA EN LA PRÁCTICA:
+  - Podemos enfocar la campaña en clientes con mayor probabilidad de
+    responder, reduciendo el costo de contactos infructuosos.
+  - Quedan errores: algunos clientes serán contactados sin responder
+    (gasto extra) y otros no serán contactados aunque hubieran respondido
+    (oportunidad perdida). La matriz de confusión cuantifica ambos.
+
+RIESGOS Y RECOMENDACIONES:
+  - Validar el modelo con datos más recientes antes de pasarlo a producción.
+  - Establecer monitoreo: si la tasa de aciertos cae, reentrenar.
+  - Acompañar la decisión técnica con criterio de negocio (clientes VIP,
+    políticas de contacto, presupuesto).

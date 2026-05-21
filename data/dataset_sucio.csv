@@ -1,0 +1,15 @@
+id_cliente,edad,ingreso_mensual,gasto_promedio,descuento_pct,ciudad,fidelidad,compro
+1,25,"S/. 1,500","12,5",10%, Lima ,si,1
+2,34,"S/. 2,300",15.0,15%,Arequipa,no,0
+3,N/A,"3,500","22,8",5%,lima,SI,1
+4,45,S/.1.250,"8,3",20%,Trujillo  ,NO,0
+5,?,"4,800",30.5,12%,LIMA,si,1
+6,28,na,"11,2",8%,arequipa,Si,1
+7,52,"S/. 2,750","45,7",25%,Cusco,No,0
+8,30,"S/. 6,200","18,9",7%,Lima,si,1
+9,-,"1,800","25,0",18%,trujillo,no,0
+10,40,"S/. 3,400","14,5",11%,AREQUIPA,SI,1
+11,22,,"9,8",14%,cusco,si,0
+12,38,"S/. 5,500",38.2,22%,lima,NO,1
+1,25,"S/. 1,500","12,5",10%, Lima ,si,1
+2,34,"S/. 2,300",15.0,15%,Arequipa,no,0

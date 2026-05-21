@@ -1,0 +1,213 @@
+REPORTE DE EJECUCION - dataset_continuo.csv
+Archivo: data/dataset_continuo.csv
+
+======================================================================
+1.B  EDA + LIMPIEZA AUTOMÁTICA
+======================================================================
+
+Marcadores no estándar de NaN convertidos: 0
+Columnas reconvertidas a numéricas: 0  
+Filas duplicadas eliminadas: 0
+
+Detalle de cambios:
+  No fueron necesarios ajustes (los datos ya estaban limpios).
+
+Tipos de columna después de la limpieza:
+        columna    tipo  nulos  %nulos
+           edad   int64      0     0.0
+ingreso_mensual float64      0     0.0
+    visitas_mes   int64      0     0.0
+        usa_app  object      0     0.0
+         ciudad  object      0     0.0
+  gasto_mensual float64      0     0.0
+
+======================================================================
+1.C  DISCRETIZACIÓN DEL TARGET (si aplica)
+======================================================================
+Variable objetivo: 'gasto_mensual'
+Tipo detectado: float64
+Valores únicos: 497
+Conclusión: target CONTINUO detectado.
+Se aplica discretización para poder usar matriz de confusión
+y métricas de clasificación (Accuracy, F1, AUC).
+
+Método: BINARIZACIÓN por MEDIA.
+Umbral = 439.6174  ->  0 si valor <= umbral, 1 si valor > umbral
+
+Distribución de la nueva variable objetivo:
+gasto_mensual_cat
+0    245
+1    255
+
+======================================================================
+1. EXPLORACIÓN INICIAL DEL DATASET
+======================================================================
+Dimensiones: 500 filas x 6 columnas
+Variable objetivo: gasto_mensual_cat
+Columnas numéricas (3): ['edad', 'ingreso_mensual', 'visitas_mes']
+Columnas categóricas (2): ['usa_app', 'ciudad']
+
+No hay valores nulos en el dataset.
+
+Distribución de la variable objetivo 'gasto_mensual_cat':
+gasto_mensual_cat
+1    255
+0    245
+
+======================================================================
+2. PARTICIÓN DE DATOS Y MODELO BASELINE
+======================================================================
+Se aplica partición ESTRATIFICADA 60/20/20:
+  - Entrenamiento: 300 registros (60%)
+  - Validación:    100 registros (20%)
+  - Prueba:        100 registros (20%)
+
+¿QUÉ ES DATA LEAKAGE?
+Es la fuga de información del conjunto de prueba hacia el modelo
+durante el entrenamiento. Provoca métricas falsamente altas que no
+se reproducen en producción.
+
+CÓMO LO EVITAMOS EN ESTE PROYECTO:
+  1) Stratify mantiene la proporción de clases sin sesgar el split.
+  2) Imputación, escalado y OneHotEncoder van DENTRO de un Pipeline
+     que se ajusta SOLO con X_train; val y test solo se transforman.
+  3) El conjunto de test no se toca hasta el final.
+
+MODELO BASELINE (DummyClassifier - clase mayoritaria):
+  Accuracy en validación: 0.5100
+  F1-score en validación: 0.3445
+Cualquier modelo entrenado debe superar estas métricas para
+considerarse útil.
+
+======================================================================
+3. SEGMENTACIÓN (CLUSTERING)
+======================================================================
+
+--- K-MEANS ---
+Algoritmo de partición que minimiza la distancia intra-cluster.
+  k=2  ->  Silhouette = 0.1650
+  k=3  ->  Silhouette = 0.1506
+  k=4  ->  Silhouette = 0.1559
+  k=5  ->  Silhouette = 0.1457
+  k=6  ->  Silhouette = 0.1556
+  >> Mejor k (K-Means según Silhouette): 2
+
+--- CLUSTERING JERÁRQUICO (aglomerativo, enlace 'ward') ---
+Construye una jerarquía fusionando los puntos más cercanos.
+  k=2  ->  Silhouette = 0.1153
+  k=3  ->  Silhouette = 0.1017
+  k=4  ->  Silhouette = 0.1063
+  k=5  ->  Silhouette = 0.1144
+  k=6  ->  Silhouette = 0.1098
+  >> Mejor k (Jerárquico según Silhouette): 2
+
+--- INTERPRETACIÓN DE LOS CLUSTERS (K-MEANS) ---
+Promedio de variables numéricas por cluster:
+          edad  ingreso_mensual  visitas_mes
+cluster                                     
+0        45.90          3447.20         4.22
+1        30.15          3562.71         6.38
+
+PROPUESTA DE PERFILES DE CLIENTES:
+  Cluster 0: 168 clientes (56.0%) - revisar tabla de medias
+    Identificar la(s) variable(s) con valor más alto/bajo
+    para nombrarlo (ej: 'Premium', 'Ocasional', 'Inactivo').
+  Cluster 1: 132 clientes (44.0%) - revisar tabla de medias
+    Identificar la(s) variable(s) con valor más alto/bajo
+    para nombrarlo (ej: 'Premium', 'Ocasional', 'Inactivo').
+
+======================================================================
+4. CLASIFICACIÓN
+======================================================================
+
+--- ÁRBOL DE DECISIÓN ---
+Modelo interpretable que divide el espacio con reglas if-else.
+  Validación  -> Accuracy: 0.7500  F1: 0.7491  AUC: 0.7495
+
+--- RANDOM FOREST ---
+Ensamble de árboles que reduce varianza y suele dar mejor desempeño.
+  Validación  -> Accuracy: 0.7400  F1: 0.7398  AUC: 0.8239
+
+--- EVALUACIÓN EN CONJUNTO DE PRUEBA (test) ---
+  Arbol de Decision         -> Acc: 0.6500  F1: 0.6495  AUC: 0.6943
+  Random Forest             -> Acc: 0.7800  F1: 0.7798  AUC: 0.8507
+
+======================================================================
+5. EVALUACIÓN COMPARATIVA
+======================================================================
+
+--- CURVAS ROC ---
+La curva ROC muestra el equilibrio entre verdaderos positivos y
+falsos positivos. Mientras más cercana a la esquina superior izquierda,
+mejor el modelo. El AUC resume la curva en un solo número (0.5 = azar).
+  Arbol de Decision: AUC = 0.6943
+  Random Forest: AUC = 0.8507
+
+--- TABLA COMPARATIVA DE MODELOS ---
+           modelo   conjunto  accuracy       f1      auc
+ Baseline (Dummy) Validación      0.51 0.344503      NaN
+Árbol de Decisión Validación      0.75 0.749121 0.749500
+    Random Forest Validación      0.74 0.739792 0.823930
+Arbol de Decision       Test      0.65 0.649475 0.694278
+    Random Forest       Test      0.78 0.779824 0.850740
+
+======================================================================
+6. MATRIZ DE CONFUSIÓN E INTERPRETACIÓN
+======================================================================
+Mejor modelo: Random Forest
+
+Matriz (filas=real, columnas=predicho):
+        Pred 0  Pred 1
+Real 0      40       9
+Real 1      13      38
+
+Reporte de clasificación detallado:
+              precision    recall  f1-score   support
+
+           0       0.75      0.82      0.78        49
+           1       0.81      0.75      0.78        51
+
+    accuracy                           0.78       100
+   macro avg       0.78      0.78      0.78       100
+weighted avg       0.78      0.78      0.78       100
+
+INTERPRETACIÓN:
+  - Verdaderos Positivos (TP): 38  -> clientes que respondieron y los acertamos
+  - Verdaderos Negativos (TN): 40  -> clientes que NO respondieron y los acertamos
+  - Falsos Positivos (FP):     9  -> les enviamos campaña y NO respondieron (costo de marketing)
+  - Falsos Negativos (FN):     13  -> clientes que sí habrían respondido y dejamos de contactar (oportunidad perdida)
+
+  - Precision (clase positiva): TP/(TP+FP) = 0.809
+    (de los que marcamos como positivos, qué % lo son realmente)
+  - Recall (clase positiva):    TP/(TP+FN) = 0.745
+    (de los positivos reales, qué % capturamos)
+  - Accuracy global:            (TP+TN)/Total = 0.780
+
+======================================================================
+7. COMUNICACIÓN A EQUIPO GERENCIAL NO TÉCNICO
+======================================================================
+
+RESUMEN PARA GERENCIA:
+
+Construimos varios modelos para apoyar la decisión de a qué clientes contactar.
+El modelo que ofrece el mejor balance entre aciertos y errores es
+'Random Forest', con los siguientes resultados sobre datos que nunca vio:
+
+  - De cada 100 decisiones, acierta aproximadamente 78.
+  - Tiene un puntaje balanceado (F1) de 78% que combina
+    no equivocarse al señalar clientes y no perder oportunidades.
+  - La capacidad de distinguir entre clientes que responden y los que no
+    (AUC) es 0.85 (0.5 sería decidir al azar; 1.0 sería perfecto).
+
+QUÉ SIGNIFICA EN LA PRÁCTICA:
+  - Podemos enfocar la campaña en clientes con mayor probabilidad de
+    responder, reduciendo el costo de contactos infructuosos.
+  - Quedan errores: algunos clientes serán contactados sin responder
+    (gasto extra) y otros no serán contactados aunque hubieran respondido
+    (oportunidad perdida). La matriz de confusión cuantifica ambos.
+
+RIESGOS Y RECOMENDACIONES:
+  - Validar el modelo con datos más recientes antes de pasarlo a producción.
+  - Establecer monitoreo: si la tasa de aciertos cae, reentrenar.
+  - Acompañar la decisión técnica con criterio de negocio (clientes VIP,
+    políticas de contacto, presupuesto).

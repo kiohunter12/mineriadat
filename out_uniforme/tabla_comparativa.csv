@@ -1,0 +1,6 @@
+modelo,conjunto,accuracy,f1,auc
+Baseline (Dummy),Validación,0.66,0.5248192771084337,
+Árbol de Decisión,Validación,0.8,0.796492537313433,0.7984446216855187
+Random Forest,Validación,0.8,0.7978125,0.882549568908693
+Arbol de Decision,Test,0.73,0.7110503525918594,0.7475222567287784
+Random Forest,Test,0.75,0.7344862155388471,0.7888525491718427

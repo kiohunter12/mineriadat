@@ -1,0 +1,694 @@
+================================================================================
+NOTEBOOK COLAB - PIPELINE DE MINERIA DE DATOS (UNIDAD 2)
+Trabajo individual: corre TODO con un dataset, luego repite con el otro
+================================================================================
+
+INSTRUCCIONES:
+1. Abre Google Colab (https://colab.research.google.com)
+2. Crea un notebook nuevo
+3. Copia cada CELDA en una celda separada del notebook
+4. Las celdas marcadas como [MARKDOWN] van como celda de "Texto" (Ctrl+M+M)
+5. Las celdas [CODIGO] van como celda de codigo
+6. Ejecuta cada celda en orden con Shift+Enter
+7. Sube tu archivo CSV cuando ejecutes la celda 2
+8. Cuando termines con un dataset, cambia el nombre del archivo en la celda 3
+   y vuelve a ejecutar desde ahi hasta el final
+
+================================================================================
+CELDA 1 [CODIGO] - IMPORTACIONES Y LIBRERIAS
+================================================================================
+
+# ============================================================
+# IMPORTACIONES - PIPELINE DE MINERIA DE DATOS
+# ============================================================
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Particion y preprocesamiento (anti data leakage)
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.impute import SimpleImputer
+
+# Modelo baseline
+from sklearn.dummy import DummyClassifier
+
+# Clustering
+from sklearn.cluster import KMeans, AgglomerativeClustering
+from sklearn.metrics import silhouette_score
+from scipy.cluster.hierarchy import dendrogram, linkage
+
+# Clasificacion
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
+
+# Metricas y evaluacion
+from sklearn.metrics import (
+    accuracy_score, f1_score, roc_auc_score, roc_curve, auc,
+    confusion_matrix, ConfusionMatrixDisplay, classification_report,
+    balanced_accuracy_score, matthews_corrcoef, cohen_kappa_score
+)
+
+import warnings
+warnings.filterwarnings("ignore")
+
+sns.set_style("whitegrid")
+plt.rcParams["figure.dpi"] = 100
+
+print("Librerias cargadas correctamente.")
+
+
+================================================================================
+CELDA 2 [CODIGO] - SUBIR EL ARCHIVO CSV
+================================================================================
+
+from google.colab import files
+uploaded = files.upload()
+# Sube primero student-mat.csv (Matematicas)
+# Cuando termines todo el analisis, vuelve a ejecutar esta celda y sube student.csv
+
+
+================================================================================
+CELDA 3 [CODIGO] - CARGAR EL DATASET (CAMBIAR AQUI PARA EL OTRO ARCHIVO)
+================================================================================
+
+# Cambia el nombre del archivo cuando trabajes con el segundo dataset:
+#   - Primera corrida:  'student-mat.csv'   (Matematicas)
+#   - Segunda corrida:  'student.csv'        (Portugues)
+NOMBRE_ARCHIVO = 'student-mat.csv'
+
+# Los archivos student usan separador ; (punto y coma)
+df = pd.read_csv(NOMBRE_ARCHIVO, sep=';')
+print(f"Dataset cargado: {df.shape[0]} filas x {df.shape[1]} columnas")
+print(f"Archivo: {NOMBRE_ARCHIVO}")
+df.sample(10)
+
+
+================================================================================
+CELDA 4 [MARKDOWN] - INTRODUCCION
+================================================================================
+
+# Pipeline de Mineria de Datos - Unidad 2
+
+Analisis completo del dataset de estudiantes:
+1. **EDA y limpieza** de datos
+2. **Discretizacion** del target continuo (G3)
+3. **Particion** Train/Validacion/Test + Modelo Baseline
+4. **Clustering** K-Means y Jerarquico con Silhouette
+5. **Clasificacion** Arbol de Decision y Random Forest
+6. **Evaluacion** con Accuracy, F1, AUC + Curva ROC
+7. **Matriz de Confusion** con interpretacion completa
+
+
+================================================================================
+CELDA 5 [CODIGO] - EXPLORACION INICIAL (EDA)
+================================================================================
+
+print("=== INFORMACION GENERAL ===")
+df.info()
+print("\n=== ESTADISTICAS DE VARIABLES NUMERICAS ===")
+print(df.describe())
+print("\n=== VALORES NULOS POR COLUMNA ===")
+nulos = df.isnull().sum()
+nulos = nulos[nulos > 0]
+print(nulos if len(nulos) > 0 else "No hay valores nulos.")
+print("\n=== DISTRIBUCION DEL TARGET G3 (nota final 0-20) ===")
+print(df['G3'].describe())
+
+
+================================================================================
+CELDA 6 [CODIGO] - VISUALIZACION DEL TARGET
+================================================================================
+
+fig, axes = plt.subplots(1, 2, figsize=(13, 4))
+
+df['G3'].hist(bins=20, ax=axes[0], color='steelblue', edgecolor='black')
+axes[0].set_title('Distribucion de la nota final (G3)')
+axes[0].set_xlabel('G3 (0-20)')
+axes[0].set_ylabel('Cantidad de estudiantes')
+axes[0].axvline(10, color='red', linestyle='--', linewidth=2, label='Umbral aprobado (10)')
+axes[0].legend()
+
+sns.boxplot(data=df, x='sex', y='G3', ax=axes[1], palette='Set2')
+axes[1].set_title('G3 por sexo')
+
+plt.tight_layout()
+plt.show()
+
+
+================================================================================
+CELDA 7 [CODIGO] - LIMPIEZA DE DATOS
+================================================================================
+
+print(f"Antes de limpiar: {df.shape}")
+
+# 1. Quitar espacios en columnas de texto
+for col in df.select_dtypes(include='object').columns:
+    df[col] = df[col].astype(str).str.strip()
+
+# 2. Reemplazar marcadores no estandar de nulos
+df = df.replace(['', 'N/A', 'NA', 'na', '?', '-', 'null', 'NULL'], np.nan)
+
+# 3. Quitar duplicados
+n_dup = df.duplicated().sum()
+df = df.drop_duplicates().reset_index(drop=True)
+print(f"Duplicados eliminados: {n_dup}")
+
+# 4. Verificar
+print(f"\nDespues de limpiar: {df.shape}")
+print(f"\nTipos de datos:")
+print(df.dtypes.value_counts())
+
+
+================================================================================
+CELDA 8 [MARKDOWN] - DISCRETIZACION DEL TARGET
+================================================================================
+
+## Discretizacion del target
+
+La variable **G3** es **continua** (0 a 20). Para usar matriz de confusion y 
+metricas de clasificacion (Accuracy, F1, AUC) necesitamos **convertirla a 
+categorica**.
+
+**Metodo elegido**: binarizacion por umbral europeo de aprobacion:
+- **0 = Desaprobado** (G3 menor a 10)
+- **1 = Aprobado**     (G3 mayor o igual a 10)
+
+Tambien quitamos G1 y G2 (notas parciales) para evitar **data leakage**: si 
+las dejaramos, el modelo predeciria G3 casi perfecto al verlas, pero eso 
+seria trampa porque en la practica queremos predecir antes de tener esas notas.
+
+
+================================================================================
+CELDA 9 [CODIGO] - DISCRETIZACION DEL TARGET
+================================================================================
+
+# Creamos el target binario
+df['aprobado'] = (df['G3'] >= 10).astype(int)
+
+print("Distribucion del nuevo target 'aprobado':")
+print(df['aprobado'].value_counts())
+print(f"\nProporcion de aprobados: {df['aprobado'].mean():.1%}")
+
+# Quitamos G1, G2, G3 para evitar leakage
+df_modelo = df.drop(columns=['G1', 'G2', 'G3'])
+print(f"\nFeatures finales: {df_modelo.shape[1]-1} variables + 1 target")
+
+# Grafico
+plt.figure(figsize=(6, 4))
+df['aprobado'].value_counts().sort_index().plot(
+    kind='bar', color=['#ef4444', '#10b981'])
+plt.title('Distribucion del target (Aprobado vs Desaprobado)')
+plt.xticks([0, 1], ['Desaprobado (0)', 'Aprobado (1)'], rotation=0)
+plt.ylabel('Cantidad de estudiantes')
+plt.tight_layout()
+plt.show()
+
+
+================================================================================
+CELDA 10 [MARKDOWN] - PARTICION Y DATA LEAKAGE
+================================================================================
+
+## Particion de datos y Data Leakage
+
+**Particion 60/20/20 estratificada:**
+- 60% Entrenamiento (entrena los modelos)
+- 20% Validacion (compara modelos sin tocar test)
+- 20% Test (evaluacion FINAL, intacta hasta el ultimo momento)
+
+**Data leakage**: ocurre cuando informacion del test se filtra al entrenamiento, 
+inflando las metricas artificialmente.
+
+**Como lo evitamos:**
+1. **Stratify**: mantiene la proporcion de aprobados/desaprobados en cada split.
+2. **Pipeline**: el escalado, imputacion y OneHotEncoder se ajustan SOLO con 
+   `X_train`. Los conjuntos de validacion y test solo se transforman.
+3. **Quitamos G1 y G2**: notas parciales que harian de trampa.
+
+
+================================================================================
+CELDA 11 [CODIGO] - PARTICION TRAIN/VAL/TEST
+================================================================================
+
+target = 'aprobado'
+X = df_modelo.drop(columns=[target])
+y = df_modelo[target]
+
+# Primero apartamos 20% para test
+X_temp, X_test, y_temp, y_test = train_test_split(
+    X, y, test_size=0.20, stratify=y, random_state=42
+)
+# Del 80% restante, sacamos 25% como validacion (= 20% del total)
+X_train, X_val, y_train, y_val = train_test_split(
+    X_temp, y_temp, test_size=0.25, stratify=y_temp, random_state=42
+)
+
+print(f"Train:      {X_train.shape[0]:>4} estudiantes ({X_train.shape[0]/len(X)*100:.0f}%)")
+print(f"Validacion: {X_val.shape[0]:>4} estudiantes ({X_val.shape[0]/len(X)*100:.0f}%)")
+print(f"Test:       {X_test.shape[0]:>4} estudiantes ({X_test.shape[0]/len(X)*100:.0f}%)")
+print(f"\nProporcion de aprobados en train: {y_train.mean():.2%}")
+print(f"Proporcion de aprobados en test:  {y_test.mean():.2%}")
+
+
+================================================================================
+CELDA 12 [CODIGO] - PIPELINE DE PREPROCESAMIENTO (ANTI DATA LEAKAGE)
+================================================================================
+
+# Pipeline que se ajusta SOLO con train (anti data leakage)
+numericas = X_train.select_dtypes(include='number').columns.tolist()
+categoricas = X_train.select_dtypes(exclude='number').columns.tolist()
+
+preprocesador = ColumnTransformer([
+    ('num', Pipeline([
+        ('imputador', SimpleImputer(strategy='median')),
+        ('escalador', StandardScaler())
+    ]), numericas),
+    ('cat', Pipeline([
+        ('imputador', SimpleImputer(strategy='most_frequent')),
+        ('encoder', OneHotEncoder(handle_unknown='ignore'))
+    ]), categoricas)
+])
+
+print(f"Columnas numericas ({len(numericas)}):")
+print(f"  {numericas}\n")
+print(f"Columnas categoricas ({len(categoricas)}):")
+print(f"  {categoricas}")
+
+
+================================================================================
+CELDA 13 [CODIGO] - MODELO BASELINE
+================================================================================
+
+# Baseline: predice siempre la clase mayoritaria
+# Cualquier modelo entrenado DEBE superar estas metricas
+baseline = DummyClassifier(strategy='most_frequent', random_state=42)
+baseline.fit(X_train, y_train)
+y_pred_base = baseline.predict(X_val)
+
+acc_b = accuracy_score(y_val, y_pred_base)
+f1_b = f1_score(y_val, y_pred_base, zero_division=0)
+
+print("=" * 50)
+print("MODELO BASELINE (DummyClassifier - clase mayoritaria)")
+print("=" * 50)
+print(f"  Accuracy en validacion: {acc_b:.4f}")
+print(f"  F1-score en validacion: {f1_b:.4f}")
+print(f"\n>> Cualquier modelo real debe superar estos valores")
+
+
+================================================================================
+CELDA 14 [CODIGO] - CLUSTERING K-MEANS CON SILHOUETTE
+================================================================================
+
+# Preprocesamos el train para clustering
+X_train_proc = preprocesador.fit_transform(X_train)
+
+# Convertir a denso si es sparse
+import scipy.sparse
+if scipy.sparse.issparse(X_train_proc):
+    X_dense = X_train_proc.toarray()
+else:
+    X_dense = X_train_proc
+
+inercias = []
+silhouettes_km = []
+rango_k = range(2, 7)
+
+print("Evaluando k de 2 a 6:\n")
+for k in rango_k:
+    km = KMeans(n_clusters=k, random_state=42, n_init=10)
+    labels = km.fit_predict(X_dense)
+    inercias.append(km.inertia_)
+    sil = silhouette_score(X_dense, labels)
+    silhouettes_km.append(sil)
+    print(f"  k={k}  ->  Inercia={km.inertia_:.1f}  |  Silhouette={sil:.4f}")
+
+# Grafico del codo + silhouette
+fig, ax = plt.subplots(1, 2, figsize=(13, 4))
+ax[0].plot(list(rango_k), inercias, 'o-', color='steelblue', linewidth=2)
+ax[0].set_xlabel('Numero de clusters (k)')
+ax[0].set_ylabel('Inercia')
+ax[0].set_title('Metodo del Codo - K-Means')
+ax[0].grid(alpha=0.3)
+
+ax[1].plot(list(rango_k), silhouettes_km, 'o-', color='green', linewidth=2)
+ax[1].set_xlabel('k')
+ax[1].set_ylabel('Silhouette score')
+ax[1].set_title('Silhouette por k')
+ax[1].grid(alpha=0.3)
+plt.tight_layout()
+plt.show()
+
+mejor_k_km = list(rango_k)[np.argmax(silhouettes_km)]
+print(f"\n>> Mejor k segun Silhouette: {mejor_k_km}")
+
+
+================================================================================
+CELDA 15 [CODIGO] - CLUSTERING JERARQUICO + DENDROGRAMA
+================================================================================
+
+# Dendrograma
+Z = linkage(X_dense, method='ward')
+
+plt.figure(figsize=(13, 5))
+dendrogram(Z, truncate_mode='lastp', p=30, leaf_rotation=90, leaf_font_size=8)
+plt.title('Dendrograma - Clustering Jerarquico (Ward)')
+plt.xlabel('Muestras')
+plt.ylabel('Distancia')
+plt.tight_layout()
+plt.show()
+
+# Silhouette para jerarquico
+print("Silhouette del clustering jerarquico:\n")
+silhouettes_jc = []
+for k in rango_k:
+    jc = AgglomerativeClustering(n_clusters=k, linkage='ward')
+    labels = jc.fit_predict(X_dense)
+    sil = silhouette_score(X_dense, labels)
+    silhouettes_jc.append(sil)
+    print(f"  k={k}  ->  Silhouette={sil:.4f}")
+
+mejor_k_jc = list(rango_k)[np.argmax(silhouettes_jc)]
+print(f"\n>> Mejor k jerarquico: {mejor_k_jc}")
+print(f"\n=== COMPARACION ===")
+print(f"K-Means mejor k:    {mejor_k_km} (sil={max(silhouettes_km):.4f})")
+print(f"Jerarquico mejor k: {mejor_k_jc} (sil={max(silhouettes_jc):.4f})")
+
+
+================================================================================
+CELDA 16 [CODIGO] - INTERPRETACION DE CLUSTERS (PERFILES)
+================================================================================
+
+# Aplicamos K-Means con el mejor k para construir los perfiles
+km_final = KMeans(n_clusters=mejor_k_km, random_state=42, n_init=10)
+labels_km = km_final.fit_predict(X_dense)
+
+# Agregamos la etiqueta a los datos originales (sin preprocesar)
+df_perfil = X_train.copy()
+df_perfil['cluster'] = labels_km
+
+# Promedios por cluster (variables numericas)
+cols_num = df_perfil.select_dtypes(include='number').columns.drop('cluster')
+perfiles = df_perfil.groupby('cluster')[cols_num].mean().round(2)
+print("PROMEDIOS POR CLUSTER (variables numericas):\n")
+print(perfiles.T)
+
+print(f"\nCantidad de estudiantes por cluster:")
+print(df_perfil['cluster'].value_counts().sort_index())
+
+# Heatmap de perfiles
+plt.figure(figsize=(10, max(4, 0.35*len(cols_num))))
+norm = (perfiles - perfiles.min()) / (perfiles.max() - perfiles.min() + 1e-9)
+sns.heatmap(norm.T, cmap='RdYlGn', annot=perfiles.T, fmt='.1f',
+            cbar_kws={'label': 'Valor normalizado'})
+plt.title('Perfiles de los clusters (heatmap)')
+plt.xlabel('Cluster')
+plt.tight_layout()
+plt.show()
+
+print("\n>> Posibles perfiles de estudiantes (interpretacion):")
+print(">> Cluster 0: revisar el promedio de variables para nombrarlo")
+print(">> Cluster 1: ej. estudiantes jovenes con buenos habitos de estudio")
+print(">> ...")
+
+
+================================================================================
+CELDA 17 [CODIGO] - ARBOL DE DECISION
+================================================================================
+
+arbol = Pipeline([
+    ('prep', preprocesador),
+    ('clf', DecisionTreeClassifier(max_depth=6, random_state=42))
+])
+arbol.fit(X_train, y_train)
+
+y_pred_arbol = arbol.predict(X_val)
+y_proba_arbol = arbol.predict_proba(X_val)[:, 1]
+acc_a = accuracy_score(y_val, y_pred_arbol)
+f1_a = f1_score(y_val, y_pred_arbol)
+auc_a = roc_auc_score(y_val, y_proba_arbol)
+
+print("=" * 50)
+print("ARBOL DE DECISION (en validacion)")
+print("=" * 50)
+print(f"  Accuracy: {acc_a:.4f}")
+print(f"  F1-score: {f1_a:.4f}")
+print(f"  AUC:      {auc_a:.4f}")
+
+
+================================================================================
+CELDA 18 [CODIGO] - RANDOM FOREST
+================================================================================
+
+rf = Pipeline([
+    ('prep', preprocesador),
+    ('clf', RandomForestClassifier(n_estimators=200, random_state=42, n_jobs=-1))
+])
+rf.fit(X_train, y_train)
+
+y_pred_rf = rf.predict(X_val)
+y_proba_rf = rf.predict_proba(X_val)[:, 1]
+acc_r = accuracy_score(y_val, y_pred_rf)
+f1_r = f1_score(y_val, y_pred_rf)
+auc_r = roc_auc_score(y_val, y_proba_rf)
+
+print("=" * 50)
+print("RANDOM FOREST (en validacion)")
+print("=" * 50)
+print(f"  Accuracy: {acc_r:.4f}")
+print(f"  F1-score: {f1_r:.4f}")
+print(f"  AUC:      {auc_r:.4f}")
+
+
+================================================================================
+CELDA 19 [CODIGO] - EVALUACION EN TEST + TABLA COMPARATIVA
+================================================================================
+
+# Solo ahora tocamos el conjunto de prueba (estuvo intacto hasta aqui)
+modelos = {
+    'Baseline (Dummy)': baseline,
+    'Arbol de Decision': arbol,
+    'Random Forest': rf
+}
+
+filas = []
+for nombre, modelo in modelos.items():
+    pred = modelo.predict(X_test)
+    acc = accuracy_score(y_test, pred)
+    f1 = f1_score(y_test, pred, zero_division=0)
+    try:
+        proba = modelo.predict_proba(X_test)[:, 1]
+        auc_v = roc_auc_score(y_test, proba)
+    except Exception:
+        auc_v = None
+    filas.append({'Modelo': nombre, 'Accuracy': acc, 'F1': f1, 'AUC': auc_v})
+
+tabla_comp = pd.DataFrame(filas)
+print("=== TABLA COMPARATIVA EN TEST ===\n")
+
+# Mostrar con colores
+display(tabla_comp.style.background_gradient(
+    subset=['Accuracy', 'F1', 'AUC'], cmap='RdYlGn', vmin=0, vmax=1
+).format({'Accuracy': '{:.3f}', 'F1': '{:.3f}', 'AUC': '{:.3f}'}))
+
+
+================================================================================
+CELDA 20 [CODIGO] - CURVAS ROC COMPARATIVAS
+================================================================================
+
+plt.figure(figsize=(8, 6))
+for nombre, modelo in modelos.items():
+    if nombre == 'Baseline (Dummy)':
+        continue
+    proba = modelo.predict_proba(X_test)[:, 1]
+    fpr, tpr, _ = roc_curve(y_test, proba)
+    roc_auc = auc(fpr, tpr)
+    plt.plot(fpr, tpr, lw=2.5, label=f"{nombre} (AUC = {roc_auc:.3f})")
+
+plt.plot([0, 1], [0, 1], 'k--', alpha=0.5, label='Azar (AUC=0.5)')
+plt.xlabel('Tasa de Falsos Positivos (FPR)', fontsize=12)
+plt.ylabel('Tasa de Verdaderos Positivos (TPR)', fontsize=12)
+plt.title('Curvas ROC - Comparacion de modelos', fontsize=13, fontweight='bold')
+plt.legend(loc='lower right', fontsize=11)
+plt.grid(alpha=0.3)
+plt.tight_layout()
+plt.show()
+
+
+================================================================================
+CELDA 21 [CODIGO] - MATRIZ DE CONFUSION CON INTERPRETACION COMPLETA
+================================================================================
+
+# Identificamos el mejor modelo (mayor F1 en test, excluyendo baseline)
+mejor_nombre = tabla_comp[~tabla_comp['Modelo'].str.contains('aseline')] \
+                .sort_values('F1', ascending=False).iloc[0]['Modelo']
+mejor_modelo = modelos[mejor_nombre]
+y_pred = mejor_modelo.predict(X_test)
+
+# Matriz de confusion (conteos + normalizada)
+cm = confusion_matrix(y_test, y_pred)
+cm_norm = cm.astype(float) / cm.sum(axis=1, keepdims=True)
+
+# Visualizacion doble
+fig, ax = plt.subplots(1, 2, figsize=(13, 5))
+ConfusionMatrixDisplay(cm, display_labels=['Desaprobado', 'Aprobado']).plot(
+    ax=ax[0], cmap='Blues', values_format='d', colorbar=False)
+ax[0].set_title(f'Conteos absolutos - {mejor_nombre}')
+
+ConfusionMatrixDisplay(cm_norm, display_labels=['Desaprobado', 'Aprobado']).plot(
+    ax=ax[1], cmap='Greens', values_format='.2f', colorbar=False)
+ax[1].set_title('Normalizada por fila (% por clase real)')
+plt.tight_layout()
+plt.show()
+
+# === METRICAS GLOBALES AVANZADAS ===
+print(f"\n{'=' * 60}")
+print(f"MEJOR MODELO: {mejor_nombre}")
+print(f"{'=' * 60}\n")
+
+acc = accuracy_score(y_test, y_pred)
+bal_acc = balanced_accuracy_score(y_test, y_pred)
+kappa = cohen_kappa_score(y_test, y_pred)
+mcc = matthews_corrcoef(y_test, y_pred)
+
+print("METRICAS GLOBALES:")
+print(f"  Accuracy          = {acc:.3f}  (aciertos totales)")
+print(f"  Balanced Accuracy = {bal_acc:.3f}  (ajustado por desbalance)")
+print(f"  Cohen's Kappa     = {kappa:.3f}  (acuerdo vs azar)")
+print(f"  MCC               = {mcc:.3f}  (correlacion -1 a 1, robusto)")
+
+# === DESGLOSE TP/TN/FP/FN ===
+tn, fp, fn, tp = cm.ravel()
+print(f"\nDESGLOSE DE LA MATRIZ:")
+print(f"  TP (Verdaderos Positivos) = {tp}")
+print(f"     -> Aprobados que el modelo identifico correctamente")
+print(f"  TN (Verdaderos Negativos) = {tn}")
+print(f"     -> Desaprobados que el modelo identifico correctamente")
+print(f"  FP (Falsos Positivos)     = {fp}  [Error tipo I]")
+print(f"     -> Desaprobados que el modelo dijo que eran aprobados")
+print(f"  FN (Falsos Negativos)     = {fn}  [Error tipo II]")
+print(f"     -> Aprobados que el modelo dijo que eran desaprobados")
+
+# === METRICAS BINARIAS ===
+precision = tp / (tp + fp + 1e-9)
+recall = tp / (tp + fn + 1e-9)
+specificity = tn / (tn + fp + 1e-9)
+npv = tn / (tn + fn + 1e-9)
+f1 = 2 * precision * recall / (precision + recall + 1e-9)
+fpr = fp / (fp + tn + 1e-9)
+fnr = fn / (fn + tp + 1e-9)
+
+print(f"\nMETRICAS BINARIAS:")
+print(f"  Precision    = {precision:.3f}  (de los predichos aprobados, % reales)")
+print(f"  Recall       = {recall:.3f}  (de los aprobados reales, % capturados)")
+print(f"  Specificity  = {specificity:.3f}  (de los desaprobados reales, % capturados)")
+print(f"  NPV          = {npv:.3f}  (de los predichos desaprobados, % reales)")
+print(f"  F1-score     = {f1:.3f}  (balance Precision-Recall)")
+print(f"  FPR          = {fpr:.3f}  (tasa de falsa alarma, menor mejor)")
+print(f"  FNR          = {fnr:.3f}  (tasa de omision, menor mejor)")
+
+# === LECTURA EN LENGUAJE NATURAL ===
+print(f"\n{'=' * 60}")
+print("LECTURA EN LENGUAJE NATURAL")
+print(f"{'=' * 60}")
+print(f"\n- De cada 100 estudiantes que realmente APROBARON, el modelo")
+print(f"  identifico correctamente {recall*100:.0f}.")
+print(f"\n- Cuando el modelo PREDICE que un estudiante aprobara, acierta")
+print(f"  {precision*100:.0f} de cada 100 veces.")
+print(f"\n- De cada 100 estudiantes que realmente DESAPROBARON, el modelo")
+print(f"  los identifico correctamente {specificity*100:.0f}.")
+
+# === REPORTE POR CLASE ===
+print(f"\n{'=' * 60}")
+print("REPORTE DETALLADO POR CLASE")
+print(f"{'=' * 60}")
+print(classification_report(y_test, y_pred,
+                            target_names=['Desaprobado', 'Aprobado']))
+
+
+================================================================================
+CELDA 22 [MARKDOWN] - INTERPRETACION FINAL Y COMUNICACION GERENCIAL
+================================================================================
+
+## Resumen para gerencia (audiencia NO tecnica)
+
+Construimos un modelo que predice si un estudiante **aprobara o desaprobara** 
+basandose en variables familiares, sociales y habitos de estudio, **sin usar 
+sus notas parciales**.
+
+**Resultados sobre datos que el modelo nunca habia visto:**
+
+- De cada 100 estudiantes, acierta aproximadamente la cantidad que figura como 
+  Accuracy en la matriz.
+- El F1-score equilibra dos cosas: no etiquetar erroneamente y no perder casos.
+- El AUC mide la capacidad del modelo de distinguir aprobados de desaprobados 
+  (0.5 seria azar, 1.0 seria perfecto).
+
+**Que significa en la practica:**
+
+- Podemos identificar **tempranamente** estudiantes con alto riesgo de 
+  desaprobar y ofrecerles apoyo focalizado (tutorias, refuerzo).
+- Quedan errores: algunos estudiantes seran marcados de riesgo sin serlo 
+  (intervencion innecesaria, costo bajo) y otros se nos escaparan sin apoyo 
+  cuando lo necesitaban (oportunidad perdida, costo alto).
+- La matriz de confusion cuantifica ambos tipos de error.
+
+**Riesgos y recomendaciones:**
+
+- Validar el modelo con un curso o semestre distinto antes de pasarlo a 
+  produccion.
+- Establecer monitoreo: si la tasa de aciertos cae al cambiar de cohorte, 
+  reentrenar.
+- Combinar la decision tecnica con criterio pedagogico del equipo docente: 
+  el modelo es una **ayuda**, no un reemplazo del juicio profesional.
+
+
+================================================================================
+CELDA 23 [CODIGO] - IMPORTANCIA DE VARIABLES (BONUS PARA RANDOM FOREST)
+================================================================================
+
+# Saber que variables pesan mas para predecir aprobacion
+if 'Random Forest' in modelos:
+    rf_model = modelos['Random Forest']
+    clf = rf_model.named_steps['clf']
+    prep = rf_model.named_steps['prep']
+
+    # Nombres de features despues del preprocesamiento
+    feature_names_num = prep.transformers_[0][2]
+    feature_names_cat = list(prep.transformers_[1][1]
+                              .named_steps['encoder']
+                              .get_feature_names_out(prep.transformers_[1][2]))
+    feature_names = feature_names_num + feature_names_cat
+
+    importancias = pd.DataFrame({
+        'feature': feature_names,
+        'importancia': clf.feature_importances_
+    }).sort_values('importancia', ascending=False).head(15)
+
+    plt.figure(figsize=(10, 6))
+    sns.barplot(data=importancias, x='importancia', y='feature', palette='Blues_r')
+    plt.title('Top 15 variables mas importantes - Random Forest')
+    plt.xlabel('Importancia')
+    plt.tight_layout()
+    plt.show()
+
+    print("\nTop 10 variables:")
+    print(importancias.head(10).to_string(index=False))
+
+
+================================================================================
+                            FIN DEL NOTEBOOK
+================================================================================
+
+PARA TRABAJAR CON EL SEGUNDO DATASET:
+
+1. Vuelve a la CELDA 2 y ejecutala para subir 'student.csv'
+2. Vuelve a la CELDA 3 y cambia el nombre del archivo:
+       NOMBRE_ARCHIVO = 'student.csv'
+3. Ejecuta desde la celda 3 en adelante (Runtime > Run after de la celda 3)
+4. Al final tendras dos analisis completos para comparar
+
+================================================================================
